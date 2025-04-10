@@ -8,22 +8,45 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [feedbackBoxes, setFeedbackBoxes] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isSupabaseConfigured, setIsSupabaseConfigured] = useState(true);
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+    // Check if Supabase is configured
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      setIsSupabaseConfigured(false);
+      setError('Supabase is not configured. Please check your environment variables.');
       setLoading(false);
+      return;
+    }
 
-      if (user) {
-        const { data, error } = await supabase
-          .from('feedback_boxes')
-          .select('*')
-          .eq('user_id', user.id);
+    const getUser = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        
+        if (userError) throw userError;
+        
+        setUser(user);
 
-        if (!error && data) {
-          setFeedbackBoxes(data);
+        if (user) {
+          const { data, error: boxesError } = await supabase
+            .from('feedback_boxes')
+            .select('*')
+            .eq('user_id', user.id);
+
+          if (boxesError) throw boxesError;
+          
+          if (data) {
+            setFeedbackBoxes(data);
+          }
         }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -39,9 +62,42 @@ export default function Dashboard() {
     return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
   }
 
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md text-center">
+          <h1 className="text-2xl font-bold text-red-600">Supabase Not Configured</h1>
+          <p className="text-gray-600 mb-4">
+            The Supabase integration is not properly configured. Please set up the Supabase integration in your Vercel project.
+          </p>
+          <Link 
+            href="/" 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Return to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
-    window.location.href = '/login';
-    return null;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md text-center">
+          <h1 className="text-2xl font-bold">Authentication Required</h1>
+          <p className="text-gray-600 mb-4">
+            You need to be logged in to access the dashboard.
+          </p>
+          <Link 
+            href="/login" 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Go to Login
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -59,6 +115,12 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+        
         <div className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Welcome, {user.email}</h2>
           <p className="text-gray-600">
